@@ -46,8 +46,9 @@ func (a *LogstashAdapter) Stream(logstream chan *router.Message) {
 			ID:       m.Container.ID,
 			Image:    m.Container.Config.Image,
 			Hostname: m.Container.Config.Hostname,
+			Fields:   a.route.Options["fields"],
 		}
-		js, err := json.Marshal(msg)
+		js, err := json.Marshal(&msg)
 		if err != nil {
 			log.Println("logstash:", err)
 			continue
@@ -67,4 +68,40 @@ type LogstashMessage struct {
 	ID       string `json:"docker.id"`
 	Image    string `json:"docker.image"`
 	Hostname string `json:"docker.hostname"`
+	Fields   string `json:"-"`
+}
+
+func UnmarshalObjectString(jsonString string) map[string]interface{} {
+	var jsonObj map[string]interface{}
+
+	if jsonString == "" {
+		return nil
+	}
+
+	b := []byte (jsonString)
+	if err := json.Unmarshal(b, &jsonObj); err != nil {
+		return nil
+	}
+	return jsonObj
+}
+
+// Custom JSON Marshaller to handle embedded JSON data
+func (m *LogstashMessage) MarshalJSON() ([]byte, error) {
+	fields := UnmarshalObjectString(m.Fields)
+	if fields != nil {
+		fields["message"] = m.Message
+		fields["docker.name"] = m.Name
+		fields["docker.id"] = m.ID
+		fields["docker.image"] = m.Image
+		fields["docker.hostname"] = m.Hostname
+		return json.Marshal(fields)
+	}
+
+	// Create a new struct so we don't call this same function again
+	type Alias LogstashMessage
+	return json.Marshal(&struct {
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	})
 }

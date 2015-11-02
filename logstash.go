@@ -82,14 +82,29 @@ func UnmarshalObjectString(jsonString string) map[string]interface{} {
 	if err := json.Unmarshal(b, &jsonObj); err != nil {
 		return nil
 	}
+
 	return jsonObj
 }
 
 // Custom JSON Marshaller to handle embedded JSON data
 func (m *LogstashMessage) MarshalJSON() ([]byte, error) {
 	fields := UnmarshalObjectString(m.Fields)
+	jsonMsg := UnmarshalObjectString(m.Message)
+
+	if jsonMsg != nil {
+		if fields == nil {
+			fields = jsonMsg
+		} else {
+			for k, v := range jsonMsg {
+				fields[k] = v
+			}
+		}
+	}
+
 	if fields != nil {
-		fields["message"] = m.Message
+		if _, present := fields["message"]; !present {
+			fields["message"] = m.Message
+		}
 		fields["docker.name"] = m.Name
 		fields["docker.id"] = m.ID
 		fields["docker.image"] = m.Image
